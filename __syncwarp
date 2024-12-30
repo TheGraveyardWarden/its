@@ -1,0 +1,60 @@
+When to Use __syncwarp
+
+You use __syncwarp() in the following scenarios:
+
+    Ensure Memory Consistency Within a Warp: If threads within a warp write to shared memory and then read from it, __syncwarp() ensures that all threads have finished writing before any start reading. This is a finer-grained synchronization compared to __syncthreads(), which applies to the entire thread block.
+
+    Resolve Divergence: If warp threads diverge (e.g., due to conditional branches), __syncwarp() can be used to synchronize them after they converge.
+
+    Explicit Synchronization: In modern CUDA versions (starting with Volta), implicit synchronization within a warp is not guaranteed in all cases. For example, if you use shared memory or perform reductions, explicit synchronization with __syncwarp() might be necessary.
+
+Sample Use Cases for __syncwarp()
+1. Shared Memory Read/Write Synchronization
+
+__global__ void warpSharedMemoryExample(int *data) {
+    __shared__ int shared[32];
+
+    int tid = threadIdx.x;
+    int lane = tid % 32; // Lane index within the warp
+
+    // Each thread writes to shared memory
+    shared[lane] = tid;
+    
+    // Synchronize within the warp to ensure writes are complete
+    __syncwarp();
+
+    // Each thread reads from shared memory
+    data[tid] = shared[(lane + 1) % 32];
+}
+
+2. Warp-Level Reduction
+
+__global__ void warpReductionExample(int *input, int *output) {
+    int tid = threadIdx.x;
+    int lane = tid % 32; // Lane index within the warp
+
+    int value = input[tid];
+
+    // Perform warp reduction
+    for (int offset = 16; offset > 0; offset /= 2) {
+        value += __shfl_down_sync(0xFFFFFFFF, value, offset);
+    }
+
+    // Synchronize to ensure reduction is complete
+    __syncwarp();
+
+    // Write the result for the first lane
+    if (lane == 0) {
+        output[tid / 32] = value;
+    }
+}
+
+Key Points:
+
+    __syncwarp() is lightweight compared to __syncthreads() because it only applies to threads in the same warp.
+    Explicit use of __syncwarp() becomes crucial when:
+        You're operating in shared memory within a warp.
+        Threads within a warp diverge.
+        You're dealing with warp-level primitives (__shfl_*, etc.) and need explicit synchronization.
+
+Let me know if you'd like me to expand on any of these examples or explain other warp-related concepts!
